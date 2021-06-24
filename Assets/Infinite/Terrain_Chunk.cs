@@ -9,12 +9,12 @@ public class Terrain_Chunk : MonoBehaviour
 {
 	public static float size = 10;  //world units per axis
 	public static int resolution = 10; //How many blocks per axis
-	public float threshold = 0.5f;
-	protected Mesh mesh;
+	public static float threshold = 0.5f;
+	protected static Mesh mesh;
 
 	//in:  8-bit mask of corners
 	//out: 12-bit mask of edges
-	protected int[] edgeTable = new int[256]
+	protected static int[] edgeTable = new int[256]
 	{
 		0x0  , 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
 		0x80c, 0x905, 0xa0f, 0xb06, 0xc0a, 0xd03, 0xe09, 0xf00,
@@ -53,7 +53,7 @@ public class Terrain_Chunk : MonoBehaviour
 	//in: [index][index2]
 	//out: int (index of vertex)
 	//The 16th entry seems to be redundant.
-	protected int[][] triTable = new int[256][]
+	protected static int[][] triTable = new int[256][]
 	{
 		new int[16] {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
 		new int[16] {0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
@@ -313,17 +313,32 @@ public class Terrain_Chunk : MonoBehaviour
 		new int[16] {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}
 	};
 
-	protected Vector3[] cornerPositions = new Vector3[8]
+	protected static Vector3[] cornerToPos = new Vector3[8]
 	{
-		new Vector3(0f * (resolution/size), 0f * (resolution/size), 0f * (resolution/size)),
-		new Vector3(0f * (resolution/size), 1f * (resolution/size), 0f * (resolution/size)),
-		new Vector3(1f * (resolution/size), 1f * (resolution/size), 0f * (resolution/size)),
-		new Vector3(1f * (resolution/size), 0f * (resolution/size), 0f * (resolution/size)),
-		new Vector3(0f * (resolution/size), 0f * (resolution/size), 1f * (resolution/size)),
-		new Vector3(0f * (resolution/size), 1f * (resolution/size), 1f * (resolution/size)),
-		new Vector3(1f * (resolution/size), 1f * (resolution/size), 1f * (resolution/size)),
-		new Vector3(1f * (resolution/size), 0f * (resolution/size), 1f * (resolution/size)),
+		new Vector3(0f, 0f, 0f),
+		new Vector3(0f, 1f, 0f),
+		new Vector3(1f, 1f, 0f),
+		new Vector3(1f, 0f, 0f),
+		new Vector3(0f, 0f, 1f),
+		new Vector3(0f, 1f, 1f),
+		new Vector3(1f, 1f, 1f),
+		new Vector3(1f, 0f, 1f),
+	};
 
+	protected static int[,] edgeToCorner = new int[12,2]
+	{
+		{0,1},
+		{1,2},
+		{2,3},
+		{3,0},
+		{4,5},
+		{5,6},
+		{6,7},
+		{7,4},
+		{0,4},
+		{1,5},
+		{2,6},
+		{3,7}
 	};
 
 	protected void Start()
@@ -341,23 +356,21 @@ public class Terrain_Chunk : MonoBehaviour
 
 		//for each block, make mesh
 		float blockUnits = size / resolution;
+
 		for (int x = 0; x < resolution; x++)
 		{
 			for (int y = 0; y < resolution; y++)
 			{
 				for (int z = 0; z < resolution; z++)
 				{
-					int blockID = (x * resolution * resolution) + (y * resolution) + z; //to be replaced with thread ID
-					float xA = Mathf.Floor(blockID/(resolution*resolution));
-					float yA = (Mathf.Floor(blockID/resolution) % resolution);
-					float zA = (blockID % resolution);
-					Vector3 blockOffset = new Vector3(xA * blockUnits, yA * blockUnits, zA * blockUnits);
+					int blockID = (x * resolution * resolution) + (y * resolution) + z;
+					Vector3 blockOffset = new Vector3(x * blockUnits, y * blockUnits, z * blockUnits);
 
 					//add corners to mask if noise at point is >= threshold
 					int cornerMask = 0;
 					for (int i = 0; i < 8; i++)
 					{
-						if (Perlin3D(transform.position + cornerPositions[i] + blockOffset) >= threshold)
+						if (Perlin3D(transform.position + (cornerToPos[i] * blockUnits) + blockOffset) >= threshold)
 							cornerMask |= (1 << i);
 					}
 
@@ -365,52 +378,12 @@ public class Terrain_Chunk : MonoBehaviour
 					int edges = edgeTable[cornerMask];
 					for (int i = 0; i < 12; i++)
 					{
-						if ((edges & 1 << i) != 0)
+						if ((edges & (1 << i)) != 0)
 						{
-							switch (i)
-							{
-								case 0:
-									vertices[(blockID * 12) + i] = (cornerPositions[0] + cornerPositions[1]) / 2f;
-									break;
-								case 1:
-									vertices[(blockID * 12) + i] = (cornerPositions[1] + cornerPositions[2]) / 2f;
-									break;
-								case 2:
-									vertices[(blockID * 12) + i] = (cornerPositions[2] + cornerPositions[3]) / 2f;
-									break;
-								case 3:
-									vertices[(blockID * 12) + i] = (cornerPositions[3] + cornerPositions[0]) / 2f;
-									break;
-								case 4:
-									vertices[(blockID * 12) + i] = (cornerPositions[4] + cornerPositions[5]) / 2f;
-									break;
-								case 5:
-									vertices[(blockID * 12) + i] = (cornerPositions[5] + cornerPositions[6]) / 2f;
-									break;
-								case 6:
-									vertices[(blockID * 12) + i] = (cornerPositions[6] + cornerPositions[7]) / 2f;
-									break;
-								case 7:
-									vertices[(blockID * 12) + i] = (cornerPositions[7] + cornerPositions[4]) / 2f;
-									break;
-								case 8:
-									vertices[(blockID * 12) + i] = (cornerPositions[0] + cornerPositions[4]) / 2f;
-									break;
-								case 9:
-									vertices[(blockID * 12) + i] = (cornerPositions[1] + cornerPositions[5]) / 2f;
-									break;
-								case 10:
-									vertices[(blockID * 12) + i] = (cornerPositions[2] + cornerPositions[6]) / 2f;
-									break;
-								case 11:
-									vertices[(blockID * 12) + i] = (cornerPositions[3] + cornerPositions[7]) / 2f;
-									break;
-
-								default:
-									break;
-							}
-
-							vertices[(blockID * 12) + i] += blockOffset;
+							float noiseA = Perlin3D(transform.position + (cornerToPos[edgeToCorner[i, 0]] * blockUnits) + blockOffset);
+							float noiseB = Perlin3D(transform.position + (cornerToPos[edgeToCorner[i, 1]] * blockUnits) + blockOffset);
+							float percentage = Mathf.Abs((threshold-noiseA) / (noiseB-noiseA));
+							vertices[(blockID * 12) + i] = Vector3.Lerp(cornerToPos[edgeToCorner[i, 0]], cornerToPos[edgeToCorner[i, 1]], percentage) * blockUnits + blockOffset;
 						}
 					}
 
@@ -428,7 +401,10 @@ public class Terrain_Chunk : MonoBehaviour
 		mesh.vertices = vertices;
 		mesh.triangles = triangles;
 		mesh.RecalculateNormals();
+
+		//65535 vertex limit per chunk. If every block had 5 faces, max resolution would be 16. Could probably get away with 17, but 18 doesn't work
 	}
+
 
 	protected float Perlin3D(Vector3 value)
 	{

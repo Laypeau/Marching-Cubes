@@ -10,8 +10,8 @@ public class Terrain_Master : MonoBehaviour
 	[Range(1, 5)] public int viewRadius = 2;
 
 	[Header("Tile Settings")]
-	public float chunkSize = 10;
-	public int blockResolution = 10;
+	public float chunkSize = 16;
+	public int blockResolution = 16;
 
 	private Vector3Int focusCellPos;
 	private Vector3Int[] activeTiles;

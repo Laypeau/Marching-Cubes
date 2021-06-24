@@ -153,9 +153,9 @@ MonoBehaviour:
   focus: {fileID: 1564712396}
   chunkPrefab: {fileID: 8960403145262188343, guid: 37d6171ea44a7e740b6a5856f8587a51,
     type: 3}
-  viewRadius: 4
+  viewRadius: 5
   chunkSize: 10
-  blockResolution: 10
+  blockResolution: 20
 --- !u!4 &734619640
 Transform:
   m_ObjectHideFlags: 0
@@ -344,7 +344,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 60
+  field of view: 75
   orthographic: 0
   orthographic size: 5
   m_Depth: -1
