@@ -7,10 +7,12 @@ using UnityEngine;
 
 public class Terrain_Chunk : MonoBehaviour
 {
-	public static float size = 10;  //world units per axis
-	public static int resolution = 10; //How many blocks per axis
-	public static float threshold = 0.5f;
-	protected static Mesh mesh;
+	public static float chunkSize = 16;  //world units per axis
+	[Range(0, 16)]
+	public static int blockResolution = 16; //How many blocks per axis.		65535 vertex limit per chunk. If every block had 5 faces, max resolution would be 16
+	public static float threshold = 0.15f; //CPU: 0.5, GPU: 0.15
+	
+	protected Mesh mesh;
 
 	//in:  8-bit mask of corners
 	//out: 12-bit mask of edges
@@ -50,7 +52,7 @@ public class Terrain_Chunk : MonoBehaviour
 		0x70c, 0x605, 0x50f, 0x406, 0x30a, 0x203, 0x109, 0x0
 	};
 
-	//in: [index][index2]
+	//in:  [index][index2]
 	//out: int (index of vertex)
 	//The 16th entry seems to be redundant.
 	protected static int[][] triTable = new int[256][]
@@ -313,7 +315,9 @@ public class Terrain_Chunk : MonoBehaviour
 		new int[16] {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}
 	};
 
-	protected static Vector3[] cornerToPos = new Vector3[8]
+	//in:  vertex index
+	//out: v3 position
+	protected static Vector3[] vertexToPos = new Vector3[8]
 	{
 		new Vector3(0f, 0f, 0f),
 		new Vector3(0f, 1f, 0f),
@@ -325,7 +329,9 @@ public class Terrain_Chunk : MonoBehaviour
 		new Vector3(1f, 0f, 1f),
 	};
 
-	protected static int[,] edgeToCorner = new int[12,2]
+	//in:  edge index, which vertex of edge
+	//out: vertex index
+	protected static int[,] edgeToVertex = new int[12,2]
 	{
 		{0,1},
 		{1,2},
@@ -351,39 +357,39 @@ public class Terrain_Chunk : MonoBehaviour
 
 	public virtual void GenerateMesh()
 	{
-		Vector3[] vertices = new Vector3[12 * resolution * resolution * resolution]; //twelve for every cube (one for every edge)
-		int[] triangles = new int[5 * 3 * resolution * resolution * resolution]; //5 triangles for every cube, 15 indexes for every cube
+		Vector3[] vertices = new Vector3[12 * blockResolution * blockResolution * blockResolution]; //twelve for every cube (one for every edge)
+		int[] triangles = new int[5 * 3 * blockResolution * blockResolution * blockResolution]; //Max 5 triangles for every cube, 15 indexes for every cube
+
+		float blockSize = chunkSize / blockResolution;
 
 		//for each block, make mesh
-		float blockUnits = size / resolution;
-
-		for (int x = 0; x < resolution; x++)
+		for (int x = 0; x < blockResolution; x++)
 		{
-			for (int y = 0; y < resolution; y++)
+			for (int y = 0; y < blockResolution; y++)
 			{
-				for (int z = 0; z < resolution; z++)
+				for (int z = 0; z < blockResolution; z++)
 				{
-					int blockID = (x * resolution * resolution) + (y * resolution) + z;
-					Vector3 blockOffset = new Vector3(x * blockUnits, y * blockUnits, z * blockUnits);
+					int blockID = (x * blockResolution * blockResolution) + (y * blockResolution) + z;
+					Vector3 blockOffset = new Vector3(x * blockSize, y * blockSize, z * blockSize);
 
-					//add corners to mask if noise at point is >= threshold
+					//add corners to cornerMask if noise at point is >= threshold
 					int cornerMask = 0;
 					for (int i = 0; i < 8; i++)
 					{
-						if (Perlin3D(transform.position + (cornerToPos[i] * blockUnits) + blockOffset) >= threshold)
+						if (Perlin3D(transform.position + (vertexToPos[i] * blockSize) + blockOffset) >= threshold)
 							cornerMask |= (1 << i);
 					}
 
-					//if edges are being used, calculate their positions
+					//if edge is active, calculate position
 					int edges = edgeTable[cornerMask];
 					for (int i = 0; i < 12; i++)
 					{
 						if ((edges & (1 << i)) != 0)
 						{
-							float noiseA = Perlin3D(transform.position + (cornerToPos[edgeToCorner[i, 0]] * blockUnits) + blockOffset);
-							float noiseB = Perlin3D(transform.position + (cornerToPos[edgeToCorner[i, 1]] * blockUnits) + blockOffset);
-							float percentage = Mathf.Abs((threshold-noiseA) / (noiseB-noiseA));
-							vertices[(blockID * 12) + i] = Vector3.Lerp(cornerToPos[edgeToCorner[i, 0]], cornerToPos[edgeToCorner[i, 1]], percentage) * blockUnits + blockOffset;
+							float noiseA = Perlin3D(transform.position + (vertexToPos[edgeToVertex[i, 0]] * blockSize) + blockOffset);
+							float noiseB = Perlin3D(transform.position + (vertexToPos[edgeToVertex[i, 1]] * blockSize) + blockOffset);
+							float percentage = Mathf.Abs((threshold-noiseA) / (noiseB-noiseA)); //percentage along edge, A->B
+							vertices[(blockID * 12) + i] = Vector3.Lerp(vertexToPos[edgeToVertex[i, 0]], vertexToPos[edgeToVertex[i, 1]], percentage) * blockSize + blockOffset;
 						}
 					}
 
@@ -401,14 +407,12 @@ public class Terrain_Chunk : MonoBehaviour
 		mesh.vertices = vertices;
 		mesh.triangles = triangles;
 		mesh.RecalculateNormals();
-
-		//65535 vertex limit per chunk. If every block had 5 faces, max resolution would be 16. Could probably get away with 17, but 18 doesn't work
 	}
 
 
 	protected float Perlin3D(Vector3 value)
 	{
-		float scale = 0.15f;
+		float scale = 0.08f;
 		float a = Mathf.PerlinNoise((value.x + 123) * scale, (value.y + 321) * scale);
 		float b = Mathf.PerlinNoise((value.y + 987) * scale, (value.z + 732) * scale);
 		float c = Mathf.PerlinNoise((value.z + 834) * scale, (value.x + 333) * scale);
@@ -419,17 +423,6 @@ public class Terrain_Chunk : MonoBehaviour
 	protected void OnDrawGizmosSelected()
 	{
 		Gizmos.color = Color.red;
-		Gizmos.DrawWireCube(transform.position + (Vector3.one * size * 0.5f), Vector3.one * size);
-		// for (int x = 0; x < resolution; x++)
-		// {
-		// 	for (int y = 0; y < resolution; y++)
-		// 	{
-		// 		for (int z = 0; z < resolution; z++)
-		// 		{
-		// 			float asd = size / resolution;
-		// 			Gizmos.DrawWireCube(transform.position + (Vector3.one * asd * 0.5f) + new Vector3(x * asd, y * asd, z * asd), asd * Vector3.one);
-		// 		}
-		// 	}
-		// }
+		Gizmos.DrawWireCube(transform.position + (Vector3.one * chunkSize * 0.5f), Vector3.one * chunkSize);
 	}
 }

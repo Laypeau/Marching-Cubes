@@ -16,21 +16,23 @@ public class Terrain_Chunk_GPU : Terrain_Chunk
 
 	public override void GenerateMesh()
 	{
-		verticesOut = new ComputeBuffer(12 * resolution * resolution * resolution, verticesOutStride, ComputeBufferType.Structured);
-		trianglesOut = new ComputeBuffer(5 * 3 * resolution * resolution * resolution, trianglesOutStride, ComputeBufferType.Structured);
+		verticesOut = new ComputeBuffer(12 * blockResolution * blockResolution * blockResolution, verticesOutStride, ComputeBufferType.Structured);
+		trianglesOut = new ComputeBuffer(5 * 3 * blockResolution * blockResolution * blockResolution, trianglesOutStride, ComputeBufferType.Structured);
 
-		int kernelID = computeShader.FindKernel("Cube");
+		int kernelID = computeShader.FindKernel("Chunk");
+
 		computeShader.SetFloats("origin", new float[3]{transform.position.x, transform.position.y, transform.position.z});
-		computeShader.SetInt("resolution", resolution);
-		computeShader.SetFloat("size", size);
+		computeShader.SetInt("resolution", blockResolution);
+		computeShader.SetFloat("size", chunkSize);
 		computeShader.SetFloat("threshold", threshold);
 		computeShader.SetBuffer(kernelID, "verticesOut", verticesOut);
 		computeShader.SetBuffer(kernelID, "trianglesOut", trianglesOut);
 
-		computeShader.Dispatch(kernelID, 1, 1, 1);
+		int asdf = Mathf.Max(1, Mathf.CeilToInt(blockResolution/8f));
+		computeShader.Dispatch(kernelID, asdf, asdf, asdf);
 
-		Vector3[] vertices = new Vector3[12 * resolution * resolution * resolution];
-		int[] triangles = new int[5 * 3 * resolution * resolution * resolution];
+		Vector3[] vertices = new Vector3[12 * blockResolution * blockResolution * blockResolution];
+		int[] triangles = new int[5 * 3 * blockResolution * blockResolution * blockResolution];
 		verticesOut.GetData(vertices);
 		trianglesOut.GetData(triangles);
 

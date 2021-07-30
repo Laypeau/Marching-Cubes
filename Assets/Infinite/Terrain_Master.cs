@@ -13,7 +13,7 @@ public class Terrain_Master : MonoBehaviour
 	public float chunkSize = 16;
 	public int blockResolution = 16;
 
-	private Vector3Int focusCellPos;
+	private Vector3Int focusCellpos;
 	private Vector3Int[] activeTiles;
 	private List<Vector3Int> existentTiles = new List<Vector3Int>();
 	
@@ -22,20 +22,20 @@ public class Terrain_Master : MonoBehaviour
 		if (focus == null || chunkPrefab == null) throw new UnityException("Focus/tile object not set");
 		if (focus == gameObject) throw new UnityException("Don't make the terrain master the focus object >:(");
 
-		Terrain_Chunk.size = chunkSize;
-		Terrain_Chunk.resolution = blockResolution;
+		Terrain_Chunk.chunkSize = chunkSize;
+		Terrain_Chunk.blockResolution = blockResolution;
 
-		focusCellPos = WorldToTileSpace(focus.position);
+		focusCellpos = WorldToTileSpace(focus.position);
 		Init();
 	}
 
 	void Update()
 	{
 		//if cell pos changes, redo chunks
-		Vector3Int currentRoundedPos = WorldToTileSpace(focus.position);
-		if (currentRoundedPos != focusCellPos)
+		Vector3Int currentFocusCellpos = WorldToTileSpace(focus.position);
+		if (currentFocusCellpos != focusCellpos)
 		{
-			focusCellPos = WorldToTileSpace(focus.position);
+			focusCellpos = WorldToTileSpace(focus.position);
 			Recalculate();
 		}
 	}
@@ -51,9 +51,12 @@ public class Terrain_Master : MonoBehaviour
 			{
 				for (int z = -viewRadius; z < viewRadius; z++)
 				{
-					activeTiles[i] = WorldToTileSpace(focus.position) + new Vector3Int(x,y,z);
-					existentTiles.Add(activeTiles[i]);
-					CreateTile(activeTiles[i].ToString(), new Vector3(focus.position.x + (chunkSize * activeTiles[i].x), focus.position.y + (chunkSize * activeTiles[i].y), focus.position.z + (chunkSize * activeTiles[i].z)));
+					Vector3Int currentTile = WorldToTileSpace(focus.position) + new Vector3Int(x, y, z);
+
+					CreateTile(currentTile.ToString(), focus.position + ((int)chunkSize * currentTile));
+					activeTiles[i] = currentTile;
+					existentTiles.Add(currentTile);
+					
 					i++;
 				}
 			}
@@ -63,9 +66,9 @@ public class Terrain_Master : MonoBehaviour
 
 	void Recalculate()
 	{
-		//Recalculate active tiles based on focus pos
 		activeTiles = new Vector3Int[(int)Mathf.Pow(viewRadius * 2, 3)];
 
+		//Find what tiles should be active
 		int i = 0;
 		for (int x = -viewRadius; x < viewRadius; x++)
 		{
@@ -79,7 +82,8 @@ public class Terrain_Master : MonoBehaviour
 			}
 		}
 
-		// Check if any existing tiles should be reactivated/deactivated
+		//Go through every existent tile, activate/deactivate them if they're in activeTiles[]
+			//will get slower as more tiles are created. is there a better way to do this?	
 		foreach (Vector3Int tile in existentTiles)
 		{
 			if (activeTiles.Contains(tile))
@@ -88,7 +92,7 @@ public class Terrain_Master : MonoBehaviour
 				transform.Find(tile.ToString()).gameObject.SetActive(false);
 		}
 
-		// Create a new tile if it doesn't already exist
+		//Create a new tile if it doesn't already exist
 		foreach (Vector3Int tile in activeTiles)
 		{
 			if (!existentTiles.Contains(tile))

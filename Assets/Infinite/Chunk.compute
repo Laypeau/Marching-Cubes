@@ -1,10 +1,11 @@
-﻿#pragma kernel Cube
+﻿#pragma kernel Chunk
 #include "noiseSimplex.cginc"
 
-static float3 origin = {0,0,0};
-static int resolution = 1;
-static float size = 1;
-static float threshold = 0.5;
+float3 origin;
+int resolution;
+float size;
+float threshold;
+static float noiseScale = 0.1;
 RWStructuredBuffer<float3> verticesOut;
 RWStructuredBuffer<int> trianglesOut;
 
@@ -302,7 +303,7 @@ static const int edgeTable[256] ={
 	0x70c, 0x605, 0x50f, 0x406, 0x30a, 0x203, 0x109, 0x0
 };
 
-float3 cornerToPos[8] ={
+static float3 vertexToPos[8] ={
 	{0, 0, 0},
 	{0, 1, 0},
 	{1, 1, 0},
@@ -313,7 +314,7 @@ float3 cornerToPos[8] ={
 	{1, 0, 1}
 };
 
-static const int edgeToCorner[12][2] = {
+static const int edgeToVertex[12][2] = {
 	{0,1},
 	{1,2},
 	{2,3},
@@ -328,42 +329,44 @@ static const int edgeToCorner[12][2] = {
 	{3,7}
 };
 
-[numthreads(resolution, resolution, resolution)]
-void Cube (uint3 id : SV_DispatchThreadID)
+[numthreads(8, 8, 8)]
+void Chunk (uint3 asdf : SV_DispatchThreadID)
 {
-	// float blockUnits = size/resolution;
-	// int blockID = (id.x * resolution * resolution) + (id.y * resolution) + id.z;
-	// float3 blockOffset = {id.x * blockUnits, id.y * blockUnits, id.z * blockUnits};
+	if (asdf.x >= resolution || asdf.y >= resolution || asdf.z >= resolution) return;
 
-	// //add corners to mask if noise at point is >= threshold
-	// int cornerMask = 0;
-	// for (int i = 0; i < 8; i++)
-	// {
-	// 	if (snoise(origin + (cornerToPos[i] * blockUnits) + blockOffset) >= threshold)
-	// 	{
-	// 		cornerMask |= (1 << i);
-	// 	}
-	// }
+	float blockUnits = size/resolution;
 
-	// //if edges are being used, calculate their positions
-	// int edges = edgeTable[cornerMask];
-	// for (int i = 0; i < 12; i++)
-	// {
-	// 	if ((edges & (1 << i)) != 0)
-	// 	{
-	// 		float noiseA = snoise(origin + (cornerToPos[edgeToCorner[i][0]] * blockUnits) + blockOffset);
-	// 		float noiseB = snoise(origin + (cornerToPos[edgeToCorner[i][1]] * blockUnits) + blockOffset);
-	// 		float percentage = abs((threshold-noiseA) / (noiseB-noiseA));
-	// 		verticesOut[(blockID * 12) + i] = cornerToPos[edgeToCorner[i][0]] + ((cornerToPos[edgeToCorner[i][1]] - cornerToPos[edgeToCorner[i][0]]) * percentage) * blockUnits + blockOffset;
-	// 	}
-	// }
+	int blockID = (asdf.x * resolution * resolution) + (asdf.y * resolution) + asdf.z;
+	float3 blockOffset = asdf * (float3)blockUnits;
 
-	// //update triangles[] with triTable[][]
-	// for (int i = 0; i < 15; i++)
-	// {
-	// 	trianglesOut[(blockID * 15) + i] = ((triTable[cornerMask][i] == -1) ? 0 : (triTable[cornerMask][i]) + (blockID * 12));
-	// }
+	//add corners to mask if noise at point is >= threshold
+	int cornerMask = 0;
+	for (int cornerIndex = 0; cornerIndex < 8; cornerIndex++)
+	{
+		if (snoise(noiseScale * (origin + blockOffset + (vertexToPos[cornerIndex] * blockUnits))) >= threshold)
+		{
+			cornerMask |= (1 << cornerIndex);
+		}
+	}
 
-	verticesOut[(id.x * resolution * resolution) + (id.y * resolution) + id.z] = float3(id.x, id.y, id.z);
+	//if edge is being used, add vertex lerped along edge
+	int edges = edgeTable[cornerMask];
+	for (int i = 0; i < 12; i++)
+	{
+		if ((edges & (1 << i)) != 0)
+		{
+			float noiseA = snoise(noiseScale * (origin + blockOffset + (vertexToPos[edgeToVertex[i][0]] * (float3)blockUnits)));
+			float noiseB = snoise(noiseScale * (origin + blockOffset + (vertexToPos[edgeToVertex[i][1]] * (float3)blockUnits)));
+			float percentage = abs((threshold-noiseA) / (noiseB-noiseA));
+			
+			verticesOut[(blockID * 12) + i] = (lerp(vertexToPos[edgeToVertex[i][0]], vertexToPos[edgeToVertex[i][1]], (float3)percentage) * (float3)blockUnits) + blockOffset;
+		}
+	}
+
+	//add triangle to the trianglesOut[]
+	for (int asdf = 0; asdf < 15; asdf++)
+	{
+		trianglesOut[(blockID * 15) + asdf] = ((triTable[cornerMask][asdf] == -1) ? 0 : (triTable[cornerMask][asdf]) + (blockID * 12));
+	}
 
 }
